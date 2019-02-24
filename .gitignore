@@ -1,0 +1,14 @@
+# Manual build artifacts
+build
+
+# Ignore logs
+*.log
+
+# Build cache
+cache
+
+
+# Ignore temporary files
+*.cpp~
+*.h~
+*.csv~
