@@ -122,11 +122,16 @@ int main() {
            }
 
            double dist_inc = 0.5;
+           double next_s;
+           int lane = 1;
+           double d = 2+4*lane;
            for (int i = 0; i < 50-path_size; ++i) {
-             next_x_vals.push_back(pos_x+(dist_inc)*cos(angle+(i+1)*(pi()/100)));
-             next_y_vals.push_back(pos_y+(dist_inc)*sin(angle+(i+1)*(pi()/100)));
-             pos_x += (dist_inc)*cos(angle+(i+1)*(pi()/100));
-             pos_y += (dist_inc)*sin(angle+(i+1)*(pi()/100));
+             next_s = car_s + i*dist_inc;
+             vector<double> next_xy = getXY(next_s, d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+             next_x_vals.push_back(next_xy[0]);
+             next_y_vals.push_back(next_xy[1]);
+             // pos_x += (dist_inc)*cos(angle+(i+1)*(pi()/100));
+             // pos_y += (dist_inc)*sin(angle+(i+1)*(pi()/100));
            }
 
 
