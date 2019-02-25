@@ -31,6 +31,11 @@ int main() {
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
+  //lane id for start
+  int lane_id = 1;
+  //target velocity
+  double tgt_vel = 10; //mph, set it to be low to have better start, and it is changing in the program
+
   string line;
   while (getline(in_map_, line)) {
     std::istringstream iss(line);
@@ -54,7 +59,7 @@ int main() {
 
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy,&lane_id,&tgt_vel]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -93,22 +98,45 @@ int main() {
 
           json msgJson;
 
-          //lane id for start
-          int lane_id = 1;
-          //target velocity
-          double tgt_vel = 49.5; //mph, lower than the 50mph
-          
           vector<double> next_x_vals; //to feed in the path output
           vector<double> next_y_vals; //to feed in the path output
 
           vector<double> pts_x; //to store points sequence to generate spline
           vector<double> pts_y; //to store points sequence to generate spline
 
+          //reference car position
            double pos_x = car_x;
            double pos_y = car_y;
            double angle = deg2rad(car_yaw);
 
            int pre_path_size = previous_path_x.size();
+
+           if(pre_path_size>0){
+             car_s = end_path_s;
+           }
+           bool too_close = false;
+
+           for(int i=0;i<sensor_fusion.size();i++){
+             //car that is in the same lane as the ego vehicle
+             float d = sensor_fusion[i][6];
+             if(d < (2+4*lane_id+2) && d > (2+4*lane_id-2)){
+               double vx = sensor_fusion[i][3];
+               double vy = sensor_fusion[i][4];
+               double check_speed = sqrt(vx*vx + vy*vy);
+               double check_s = sensor_fusion[i][5];
+
+               check_s += check_speed*0.02*pre_path_size;
+               if((check_s>car_s) && ((check_s-car_s)<30)){
+                 too_close = true;
+               }
+
+               if(too_close){
+                 tgt_vel -= 0.5; //tgt_vel is in mph
+               }else if(tgt_vel < 49){
+                 tgt_vel += 0.3;
+               }
+             }
+           }
 
            //store the unfinished points from last path and combine it with new path later
            for (int i = 0; i < pre_path_size; i++) {
