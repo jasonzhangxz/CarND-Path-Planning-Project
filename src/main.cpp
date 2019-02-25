@@ -7,6 +7,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "spline.h"
 
 // for convenience
 using nlohmann::json;
@@ -50,6 +51,8 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
+
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -90,48 +93,96 @@ int main() {
 
           json msgJson;
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
+          //lane id for start
+          int lane_id = 1;
+          //target velocity
+          double tgt_vel = 49.5; //mph, lower than the 50mph
+          
+          vector<double> next_x_vals; //to feed in the path output
+          vector<double> next_y_vals; //to feed in the path output
 
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
+          vector<double> pts_x; //to store points sequence to generate spline
+          vector<double> pts_y; //to store points sequence to generate spline
 
-           double pos_x;
-           double pos_y;
-           double angle;
-           int path_size = previous_path_x.size();
+           double pos_x = car_x;
+           double pos_y = car_y;
+           double angle = deg2rad(car_yaw);
 
-           for (int i = 0; i < path_size; ++i) {
+           int pre_path_size = previous_path_x.size();
+
+           //store the unfinished points from last path and combine it with new path later
+           for (int i = 0; i < pre_path_size; i++) {
              next_x_vals.push_back(previous_path_x[i]);
              next_y_vals.push_back(previous_path_y[i]);
            }
 
-           if (path_size == 0) {
-             pos_x = car_x;
-             pos_y = car_y;
-             angle = deg2rad(car_yaw);
-           } else {
-             pos_x = previous_path_x[path_size-1];
-             pos_y = previous_path_y[path_size-1];
+           if (pre_path_size < 2) { //the previous calculated path almost end, use the car's current position as starting reference
+             double pre_car_x = car_x - cos(car_yaw);
+             double pre_car_y = car_y - sin(car_yaw);
+             pts_x.push_back(pre_car_x);
+             pts_x.push_back(car_x);
 
-             double pos_x2 = previous_path_x[path_size-2];
-             double pos_y2 = previous_path_y[path_size-2];
+             pts_y.push_back(pre_car_y);
+             pts_y.push_back(car_y);
+
+             angle = deg2rad(car_yaw);
+           } else { //use the previous path's end point as starting reference
+             pos_x = previous_path_x[pre_path_size-1];
+             pos_y = previous_path_y[pre_path_size-1];
+
+             double pos_x2 = previous_path_x[pre_path_size-2];
+             double pos_y2 = previous_path_y[pre_path_size-2];
              angle = atan2(pos_y-pos_y2,pos_x-pos_x2);
+
+             pts_x.push_back(pos_x2);
+             pts_x.push_back(pos_x);
+
+             pts_y.push_back(pos_y2);
+             pts_y.push_back(pos_y);
            }
 
-           double dist_inc = 0.5;
-           double next_s;
-           int lane = 1;
-           double d = 2+4*lane;
-           for (int i = 0; i < 50-path_size; ++i) {
-             next_s = car_s + i*dist_inc;
-             vector<double> next_xy = getXY(next_s, d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-             next_x_vals.push_back(next_xy[0]);
-             next_y_vals.push_back(next_xy[1]);
-             // pos_x += (dist_inc)*cos(angle+(i+1)*(pi()/100));
-             // pos_y += (dist_inc)*sin(angle+(i+1)*(pi()/100));
+           //add another 3 points ahead of starting referenceto pts_x/y which are 30 m apart in Frenet coordinates
+           vector<double> next_wp0 = getXY(car_s+30,(2+4*lane_id),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp1 = getXY(car_s+60,(2+4*lane_id),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp2 = getXY(car_s+90,(2+4*lane_id),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           pts_x.push_back(next_wp0[0]);
+           pts_x.push_back(next_wp1[0]);
+           pts_x.push_back(next_wp2[0]);
+
+           pts_y.push_back(next_wp0[1]);
+           pts_y.push_back(next_wp1[1]);
+           pts_y.push_back(next_wp2[1]);
+
+           //Convert the pts_x/y into local coordinates(i.e.ego vehicle coordinates) to do the spline interpolation
+           for(int i=0;i<pts_x.size();i++){
+             double shift_x = pts_x[i] - pos_x;
+             double shift_y = pts_y[i] - pos_y;
+
+             pts_x[i] = (shift_x*cos(0-angle) - shift_y*sin(0-angle));
+             pts_y[i] = (shift_x*sin(0-angle) + shift_y*cos(0-angle));
+           }
+
+           //create the spline
+           tk::spline s;
+           s.set_points(pts_x,pts_y);
+
+           //interpolate the spline so that the car will drive at expected speed
+           double tgt_x = 30.0;
+           double tgt_y = s(tgt_x);
+           double tgt_dist = sqrt((tgt_x*tgt_x) + (tgt_y*tgt_y));
+           //calculate the number of points to be interpolated based on the target speed
+           double N = tgt_dist/(tgt_vel*0.45 * 0.02); //1mph = 0.45 m/s, 0.02s is the simulation excution time
+
+           //combine the spline interpolated points with unfinished previous path
+           for (int i = 0; i < 50-pre_path_size; ++i) {
+             double x_point = tgt_x/N * (i+1);
+             double y_point = s(x_point);
+
+             double x_interp = x_point*cos(angle) - y_point*sin(angle);
+             double y_interp = x_point*sin(angle) + y_point*cos(angle);
+
+             next_x_vals.push_back(x_interp + pos_x);
+             next_y_vals.push_back(y_interp + pos_y);
            }
 
 
