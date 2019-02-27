@@ -115,27 +115,62 @@ int main() {
              car_s = end_path_s;
            }
            bool too_close = false;
+           bool right_lane_front_ok = false;
+           bool right_lane_back_ok = false;
+           bool left_lane_front_ok = false;
+           bool left_lane_back_ok = false;
 
            for(int i=0;i<sensor_fusion.size();i++){
              //car that is in the same lane as the ego vehicle
              float d = sensor_fusion[i][6];
-             if(d < (2+4*lane_id+2) && d > (2+4*lane_id-2)){
-               double vx = sensor_fusion[i][3];
-               double vy = sensor_fusion[i][4];
-               double check_speed = sqrt(vx*vx + vy*vy);
-               double check_s = sensor_fusion[i][5];
+             if (d<0) continue;
 
-               check_s += check_speed*0.02*pre_path_size;
-               if((check_s>car_s) && ((check_s-car_s)<30)){
-                 too_close = true;
+             double vx = sensor_fusion[i][3];
+             double vy = sensor_fusion[i][4];
+             double check_speed = sqrt(vx*vx + vy*vy);
+             double check_s = sensor_fusion[i][5];
+
+             check_s += check_speed*0.02*pre_path_size;//predict the target's position
+
+             if(d > (2+4*lane_id+2) && d < (2+4*(lane_id+1)+2) ){ //target is right one lane
+               if( (check_s-car_s)>30 && car_speed<check_speed*2.24){
+                 right_lane_front_ok = true;
                }
-
-               if(too_close){
-                 tgt_vel -= 0.5; //tgt_vel is in mph
-               }else if(tgt_vel < 49){
-                 tgt_vel += 0.3;
+               if( (car_s-check_s)>30 && car_speed>check_speed*2.24){
+                 right_lane_back_ok = true;
                }
              }
+
+
+             if(d < (2+4*lane_id-2)  && d > (2+4*(lane_id-1)-2)){ //target is left one lane
+               if( (check_s-car_s)>30 && car_speed<check_speed*2.24 ){
+                 left_lane_front_ok = true;
+               }
+               if( (car_s-check_s)>30 && car_speed>check_speed*2.24 ){
+                 left_lane_back_ok = true;
+               }
+             }
+
+             if(d < (2+4*lane_id+2) && d > (2+4*lane_id-2)){ //target is in the same lane
+               if((check_s-car_s)<30){
+                 too_close = true;
+               }
+             }
+
+             if(too_close && left_lane_front_ok && left_lane_back_ok){
+               lane_id -= 1;
+               std::cout << "Changed to lane: "<<lane_id << '\n';
+               break;
+             }else if(too_close && right_lane_front_ok && right_lane_back_ok){
+               lane_id += 1;
+               std::cout << "Changed to lane: "<<lane_id << '\n';
+               break;
+             }else if(too_close && tgt_vel>check_speed*2.24){
+               tgt_vel -= 0.3; //tgt_vel is in mph
+             }else if(tgt_vel < 49){
+               tgt_vel += 0.3;
+             }
+
            }
 
            //store the unfinished points from last path and combine it with new path later
