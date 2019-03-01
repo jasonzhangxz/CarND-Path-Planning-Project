@@ -10,7 +10,51 @@ sudo chmod u+x {simulator_file_name}
 ```
 
 ### Goals
-In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
+In this project the goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
+
+####Reflection
+[//]: # (Image References)
+
+[video1]: ./videos/pathplanning.mp4 "Starting"
+[video2]: ./videos/pathplanning2.mp4 "After one lap"
+[image1]: ./videos/calculation.jpg "spline calculation"
+
+#####State Machine
+This project uses a very simple state machine to decide whether to change lanes or stay in lane.
+It first goes through all the sensor fusion data to get how far is the front car (if any) and the speed 
+of it, is there any cars on left lane and how far and fast they are, is there any cars on right lane
+and how far and fast they are driving. Then based on those information decide whether a lane change
+to the left or right is possible. Right now the algorithm would choose left lane to change if both sides 
+are available. In the future, it would be better to design a cost function to decide which side is more
+efficient. If decide to stay in lane, then find out whether to increase speed, decrease speed or maintain speed. 
+
+#####Trajectory smoothness
+To make the trajectory smooth, this project is taking advantage of the pre-calculated path and add the path on top of it. 
+To minimize the jerk motions, the speed is increased or reduced slowly. Because the calculated path is feeded into the controller directly to control the vehicle's speed, so the distance between the points will decide the speed and the acceleration of the ego vehicle. 
+In this project I used the Spline function to interpolate the new path for the ego vehicle.
+
+- First combine the previous path end point and 3 more new projected points
+- Then convert them into local coordinates, i.e vehicle coordinates
+- create the Spline function based on those points
+- Given the target ego vehicle speed calculate the number of points to be generated(see attached picture)
+- Knowing N, the x will be got easily
+- Given x, using the Spline function to get corresponding y values
+- Convert the x,y value back to global coordinates
+- Finally feed the new path to vehicle controller
+
+![alt text][image1]
+
+
+#####Results
+Here's a short video of when the ego vehicle just start to move [click here.](./videos/pathplanning.mp4)
+
+![alt text][video1]
+
+
+After a lap, it is still running, [check out here.](./videos/pathplanning2.mp4)
+
+![alt text][video2]
+
 
 #### The map of the highway is in data/highway_map.txt
 Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
@@ -110,36 +154,4 @@ Please (do your best to) stick to [Google's C++ style guide](https://google.gith
 Note: regardless of the changes you make, your project must be buildable using
 cmake and make!
 
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 
